@@ -1,0 +1,32 @@
+{
+  "slot": 423108383,
+  "blockTime": 1763747336,
+  "version": "legacy",
+  "meta": {
+    "err": null,
+    "fee": 5000,
+    "innerInstructions": []
+  },
+  "transaction": {
+    "signatures": [
+      "4ReKprwf3WdLHRrzp4ctPWNBsQDPL3VZz3zMmoZfcGJMJCHh5Vq937mPdyxhCbw54wNnA6hZ7KfNpQdpt13yY7A9"
+    ],
+    "message": {
+      "instructions": [
+        {
+          "program": "system",
+          "programId": "11111111111111111111111111111111",
+          "stackHeight": 1,
+          "parsed": {
+            "type": "transfer",
+            "info": {
+              "source": "9B5XszUGdMaxCZ7uSQhPzdks5ZQSmWxrmzCSvtJ6Ns6g",
+              "destination": "D1UPrG5kHPhEvwAoYpFymQkHsNNzx8jWooeAvKiPfgFQ",
+              "lamports": 1000000000
+            }
+          }
+        }
+      ]
+    }
+  }
+}
