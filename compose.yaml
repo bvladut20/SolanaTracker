@@ -1,0 +1,23 @@
+name: solanatracker
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: solana_tracker
+      POSTGRES_USER: solana_tracker
+      # Shared local-development credentials, not production secrets.
+      POSTGRES_PASSWORD: solana_tracker_dev
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      # PostgreSQL 18 images keep version-specific data under this parent directory.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solana_tracker -d solana_tracker"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres_data:

@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.0" />
     <ProjectReference Include="../SolanaTracker.Application/SolanaTracker.Application.csproj" />
     <ProjectReference Include="../SolanaTracker.Domain/SolanaTracker.Domain.csproj" />
   </ItemGroup>
