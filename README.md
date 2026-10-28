@@ -1,38 +1,23 @@
 # SolanaTracker
 
-A Solana indexer learning project in C# and .NET 10. Currently a console exploration tool that runs once and exits.
+## Overview
 
-## What it does
+SolanaTracker is a .NET 10 console application for single-pass inspection of finalized Solana transactions and extraction of SOL transfers involving a configured wallet.
 
-- Connects to a configurable Solana JSON-RPC endpoint, defaulting to Devnet.
-- Shows the highest finalized slot and lists recent transaction signatures for one configured wallet.
-- Retrieves **only the newest listed transaction**, then prints its outcome and top-level instructions.
-- Extracts successful, parsed, top-level System Program instructions of type `transfer` involving the wallet.
-- Reports each transfer's signature, slot, original instruction index, sender, recipient, integer lamports, and optional block time.
+The application lists recent transaction signatures, retrieves the newest listed transaction, and reports its outcome, top-level instructions, and supported transfers. Transfer records include the signature, slot, original instruction index, sender, recipient, integer lamport amount, and optional block time.
 
-Finalized does not mean successful: failed transactions produce no completed transfers. A wallet reference does not necessarily indicate a transfer, so the newest transaction may contain none that are supported.
+Extraction supports successful, parsed, top-level System Program instructions of type `transfer`. Failed transactions produce no completed transfer records.
 
-## What it does not do
+## Prerequisites
 
-- Extract inner transfers, token transfers, account creation, `transferWithSeed`, or other instruction types.
-- Process every listed transaction or paginate wallet history.
-- Save transactions, transfers, or progress to a database.
-- Run continuously, retry automatically, or recover missed activity after restarting.
-- Provide a REST API.
+- .NET 10 SDK.
+- Access to a Solana JSON-RPC endpoint; Devnet is the default.
+- A public wallet address with activity on the selected network. No private key is required.
+- PostgreSQL for the database diagnostic. Docker Desktop with Compose can provide a local instance.
 
-This is not yet a complete or reliable wallet transfer history.
+## Configuration
 
-## How to run
-
-Install the **.NET 10 SDK** and use a **public wallet address with Devnet activity**. No private key or seed phrase is needed.
-
-From the directory containing this README and `SolanaTracker.sln`:
-
-```sh
-dotnet run --project SolanaTracker.ConsoleApp -- YOUR_DEVNET_WALLET_ADDRESS
-```
-
-Alternatively, set the wallet in `SolanaTracker.ConsoleApp/appsettings.json`:
+Settings are loaded from `SolanaTracker.ConsoleApp/appsettings.json` using the .NET Options pattern:
 
 ```json
 {
@@ -40,10 +25,121 @@ Alternatively, set the wallet in `SolanaTracker.ConsoleApp/appsettings.json`:
     "RpcEndpoint": "https://api.devnet.solana.com",
     "WalletAddress": "YOUR_DEVNET_WALLET_ADDRESS",
     "SignatureLimit": 5
+  },
+  "Database": {
+    "ConnectionString": "Host=localhost;Port=55432;Database=solana_tracker;Username=solana_tracker;Password=solana_tracker_dev;Timeout=5;Command Timeout=5",
+    "CheckConnection": false
   }
 }
 ```
 
-Then run without the wallet argument. `SignatureLimit` controls how many signatures are listed (1–1000), not how many transactions are inspected. The wallet must have activity on the selected network.
+| Setting | Purpose |
+| --- | --- |
+| `Explorer:RpcEndpoint` | Solana JSON-RPC URL; must use HTTP or HTTPS. |
+| `Explorer:WalletAddress` | Wallet whose transactions are inspected. Required for RPC execution. |
+| `Explorer:SignatureLimit` | Number of signatures requested, from 1 to 1,000. Only the newest listed transaction is retrieved. |
+| `Database:ConnectionString` | PostgreSQL connection parameters. Required for the database diagnostic. |
+| `Database:CheckConnection` | Run the database diagnostic instead of Solana inspection. Defaults to `false`. |
 
-In **Rider**, open `SolanaTracker.sln`, select **SolanaTracker.ConsoleApp** as the run project, and use the configured wallet or supply it as a program argument. Settings are loaded beside the executable, so Rider's working directory does not matter.
+Command-line settings override environment variables, which override JSON configuration. Environment variables use double underscores for section separators, for example `Database__ConnectionString` or `Explorer__SignatureLimit`.
+
+Configuration is loaded beside the executable, independently of the working directory. Startup validates the settings required by the selected execution mode. RPC execution does not require PostgreSQL.
+
+The included database credentials are for local development only. Supply deployment credentials through environment configuration or an appropriate secret provider.
+
+## Running
+
+Run commands from the directory containing this README and `SolanaTracker.sln`:
+
+```sh
+dotnet run --project SolanaTracker.ConsoleApp
+```
+
+Override the configured wallet with a positional argument:
+
+```sh
+dotnet run --project SolanaTracker.ConsoleApp -- YOUR_DEVNET_WALLET_ADDRESS
+```
+
+Alternatively, use named settings:
+
+```sh
+dotnet run --project SolanaTracker.ConsoleApp -- --Explorer:WalletAddress YOUR_DEVNET_WALLET_ADDRESS --Explorer:SignatureLimit 10
+```
+
+Use either a single positional wallet argument or named settings. The application runs once and exits. In Rider, open `SolanaTracker.sln` and select `SolanaTracker.ConsoleApp` as the run project.
+
+## Database
+
+Database access uses Npgsql and direct SQL. The current database operation is a read-only connectivity diagnostic; no application schema or persistence operations are implemented.
+
+### Local instance
+
+```sh
+docker compose up -d --wait
+docker compose ps
+```
+
+Compose runs PostgreSQL 18 at `127.0.0.1:55432` with a readiness health check. Data is stored in the Docker-managed `postgres_data` volume, mounted at `/var/lib/postgresql`.
+
+| Parameter | Local value |
+| --- | --- |
+| Host | `localhost` |
+| Port | `55432` |
+| Database | `solana_tracker` |
+| Username | `solana_tracker` |
+| Password | `solana_tracker_dev` |
+
+These parameters can also be used in Rider's Database tool window. A separately managed PostgreSQL instance can be used by overriding `Database:ConnectionString`.
+
+Docker initializes credentials and the database when the data volume is empty. Editing the Compose environment does not update credentials in an existing database.
+
+### Connectivity diagnostic
+
+```sh
+dotnet run --project SolanaTracker.ConsoleApp -- --Database:CheckConnection true
+```
+
+The diagnostic authenticates and queries the database name and server version. It makes no Solana requests and writes no schema or application data. Success returns exit code 0; failure returns exit code 1. This execution mode is temporary pending integration of database access into ingestion.
+
+For interactive SQL access:
+
+```sh
+docker compose exec postgres psql -U solana_tracker -d solana_tracker
+```
+
+### Shutdown
+
+Stop the service:
+
+```sh
+docker compose stop postgres
+```
+
+Remove the containers and network while retaining the data volume:
+
+```sh
+docker compose down
+```
+
+Restart with `docker compose up -d --wait`. Removing the named volume deletes its database data.
+
+## Testing
+
+```sh
+dotnet build SolanaTracker.sln
+dotnet test SolanaTracker.sln
+```
+
+The xUnit suite runs offline using saved JSON fixtures and fake HTTP responses. Coverage includes transfer extraction, transaction outcomes, malformed input, configuration binding and validation, configuration-provider precedence, and console workflow orchestration.
+
+Database configuration tests do not require PostgreSQL. Verify real connectivity separately with the database diagnostic. Database schema and persistence integration tests are not yet implemented.
+
+## Current limitations
+
+- Only the newest listed transaction is retrieved; history pagination is not implemented.
+- Inner transfers, token transfers, account creation, `transferWithSeed`, and other instruction types are excluded.
+- Transactions, transfers, and ingestion progress are not persisted.
+- Continuous polling, automatic retries, restart recovery, and a REST API are not implemented.
+
+The application does not provide a complete wallet transfer history.

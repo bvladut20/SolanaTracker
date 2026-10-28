@@ -2,7 +2,7 @@
 
 ## Working agreement
 
-- This is a learning project. Explain architectural choices and trade-offs in concise, beginner-friendly language.
+- Write clear, concise documentation and code comments. Explain architectural choices and trade-offs in conversation.
 - Read this file before each implementation task. Inspect the current code rather than assuming an earlier chat describes its present state.
 - Obtain explicit approval before changing implementation logic. Discussion, questions, proposed plans, and future milestones are not implementation approval.
 - Work only within the approved scope. An approved step includes its necessary implementation and verification; do not ask again for routine choices within that scope.
@@ -33,11 +33,11 @@ Follow John Ousterhout's *A Philosophy of Software Design*. The goal is to reduc
 
 ## Project boundaries and current scope
 
-The solution is `SolanaTracker/SolanaTracker.sln`, targeting .NET 10:
+The solution is `SolanaTracker.sln`, targeting .NET 10:
 
 - `SolanaTracker.Domain`: plain domain records, independent of RPC, console output, and persistence.
 - `SolanaTracker.Application`: application contracts and, as needed, ingestion workflows; references Domain.
-- `SolanaTracker.Infrastructure`: Solana JSON-RPC, transaction JSON extraction, and eventually PostgreSQL; references Application and Domain.
+- `SolanaTracker.Infrastructure`: Solana JSON-RPC, transaction JSON extraction, and PostgreSQL connectivity; references Application and Domain.
 - `SolanaTracker.ConsoleApp`: executable exploration tool, Options configuration, composition, and console presentation; references Application and Infrastructure.
 - `SolanaTracker.Tests`: xUnit tests and offline JSON fixtures, including configuration and console workflow tests.
 
@@ -52,9 +52,9 @@ PostgreSQL persistence, pagination, wallet checkpoints, continuous polling, reco
 Run commands from the directory containing this file:
 
 ```sh
-dotnet build SolanaTracker/SolanaTracker.sln
-dotnet test SolanaTracker/SolanaTracker.sln
-dotnet run --project SolanaTracker/SolanaTracker.ConsoleApp/SolanaTracker.ConsoleApp.csproj
+dotnet build SolanaTracker.sln
+dotnet test SolanaTracker.sln
+dotnet run --project SolanaTracker.ConsoleApp/SolanaTracker.ConsoleApp.csproj
 ```
 
 - Add tests for meaningful behaviour and failure boundaries, not implementation details or trivial wrappers.
