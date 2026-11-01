@@ -6,4 +6,5 @@ public sealed class DatabaseOptions
 
     public string ConnectionString { get; set; } = "";
     public bool CheckConnection { get; set; }
+    public bool ApplyMigrationsOnStartup { get; set; }
 }

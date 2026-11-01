@@ -37,9 +37,10 @@ The solution is `SolanaTracker.sln`, targeting .NET 10:
 
 - `SolanaTracker.Domain`: plain domain records, independent of RPC, console output, and persistence.
 - `SolanaTracker.Application`: application contracts and, as needed, ingestion workflows; references Domain.
-- `SolanaTracker.Infrastructure`: Solana JSON-RPC, transaction JSON extraction, and PostgreSQL connectivity; references Application and Domain.
+- `SolanaTracker.Infrastructure`: Solana JSON-RPC, transaction JSON extraction, EF entities, mappings, migrations, and PostgreSQL connectivity; references Application and Domain.
 - `SolanaTracker.ConsoleApp`: executable exploration tool, Options configuration, composition, and console presentation; references Application and Infrastructure.
 - `SolanaTracker.Tests`: xUnit tests and offline JSON fixtures, including configuration and console workflow tests.
+- `SolanaTracker.IntegrationTests`: schema and startup migration tests against real PostgreSQL, using isolated temporary databases.
 
 The current console app makes one pass: get the finalized slot, list recent wallet signatures, retrieve the newest transaction, print its instructions, and extract supported transfers. Settings are bound from the `Explorer` configuration section and validated at host startup. Preserve the positional wallet argument and named/environment overrides unless a change is approved.
 
@@ -47,13 +48,17 @@ Supported transfers are successful, parsed, top-level System Program instruction
 
 PostgreSQL persistence, pagination, wallet checkpoints, continuous polling, recovery, retries, and the REST API are planned stages, not automatically authorized work. Do not add a broker or full event-sourcing architecture without an agreed need.
 
+The database schema uses EF Core code-first migrations. Normal startup can apply migrations through `Database:ApplyMigrationsOnStartup`; diagnostic mode remains read-only. Persistence of fetched transaction data is not yet implemented. Preserve the configured connection target and never migrate an unrelated local database as part of testing. Add migrations for model changes; do not edit applied migrations or use `EnsureCreated` alongside them.
+
 ## Verification
 
 Run commands from the directory containing this file:
 
 ```sh
 dotnet build SolanaTracker.sln
-dotnet test SolanaTracker.sln
+dotnet test SolanaTracker.Tests
+docker compose up -d --wait
+dotnet test SolanaTracker.IntegrationTests
 dotnet run --project SolanaTracker.ConsoleApp/SolanaTracker.ConsoleApp.csproj
 ```
 

@@ -5,7 +5,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Npgsql" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <ProjectReference Include="../SolanaTracker.Application/SolanaTracker.Application.csproj" />
     <ProjectReference Include="../SolanaTracker.Domain/SolanaTracker.Domain.csproj" />
   </ItemGroup>
