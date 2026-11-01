@@ -70,6 +70,15 @@ public sealed class DatabaseOptionsTests : IDisposable
         await host.StopAsync();
     }
 
+    [Fact]
+    public async Task Enabled_startup_migrations_validate_connection_configuration_before_connecting()
+    {
+        File.WriteAllText(Path.Combine(_directory, "appsettings.json"),
+            "{\"Explorer\":{\"WalletAddress\":\"public-wallet\"},\"Database\":{\"ApplyMigrationsOnStartup\":true}}");
+        using var host = Builder(databaseCheck: false).Build();
+        await Assert.ThrowsAsync<OptionsValidationException>(() => host.StartAsync());
+    }
+
     private Microsoft.Extensions.Hosting.HostApplicationBuilder Builder(bool databaseCheck = true)
     {
         var builder = ExplorerHost.CreateBuilder(

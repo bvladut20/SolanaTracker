@@ -39,7 +39,7 @@ catch (NpgsqlException)
 {
     // Driver error details may include connection credentials. Keep console errors
     // generic; the connection string can be checked locally without printing it.
-    Console.Error.WriteLine("PostgreSQL connection check failed. Check that the database is running and Database:ConnectionString is correct.");
+    Console.Error.WriteLine("PostgreSQL operation failed. Check database availability, credentials, permissions, and migration logs.");
     Environment.ExitCode = 1;
 }
 catch (Exception ex) when (ex is ArgumentException or IOException or JsonException

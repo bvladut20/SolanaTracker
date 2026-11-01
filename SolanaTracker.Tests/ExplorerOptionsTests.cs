@@ -37,6 +37,20 @@ public sealed class ExplorerOptionsTests : IDisposable
     }
 
     [Fact]
+    public async Task Local_settings_override_json_and_preserve_unspecified_settings()
+    {
+        File.WriteAllText(Path.Combine(_directory, "appsettings.local.json"),
+            "{\"Explorer\":{\"SignatureLimit\":10}}");
+        using var host = Builder().Build();
+        await host.StartAsync();
+        var options = host.Services.GetRequiredService<IOptions<ExplorerOptions>>().Value;
+        Assert.Equal(10, options.SignatureLimit);
+        Assert.Equal(Wallet, options.WalletAddress);
+        Assert.Equal("https://example.test/rpc", options.RpcEndpoint);
+        await host.StopAsync();
+    }
+
+    [Fact]
     public async Task Positional_wallet_override_is_preserved_and_trimmed()
     {
         using var host = Builder(["  another-wallet  "]).Build();
@@ -48,6 +62,8 @@ public sealed class ExplorerOptionsTests : IDisposable
     [Fact]
     public async Task Named_command_line_settings_override_json()
     {
+        File.WriteAllText(Path.Combine(_directory, "appsettings.local.json"),
+            "{\"Explorer\":{\"WalletAddress\":\"local-wallet\",\"SignatureLimit\":7}}");
         using var host = Builder([
             "--Explorer:WalletAddress", "command-line-wallet",
             "--Explorer:RpcEndpoint", "http://localhost:8899",
@@ -63,6 +79,8 @@ public sealed class ExplorerOptionsTests : IDisposable
     [Fact]
     public async Task Environment_overrides_json_and_command_line_overrides_environment()
     {
+        File.WriteAllText(Path.Combine(_directory, "appsettings.local.json"),
+            "{\"Explorer\":{\"WalletAddress\":\"local-wallet\"}}");
         // Only changes this test process; tests within this class run sequentially.
         const string variable = "Explorer__WalletAddress";
         var previous = Environment.GetEnvironmentVariable(variable);

@@ -13,7 +13,7 @@ Extraction supports successful, parsed, top-level System Program instructions of
 - .NET 10 SDK.
 - Access to a Solana JSON-RPC endpoint; Devnet is the default.
 - A public wallet address with activity on the selected network. No private key is required.
-- PostgreSQL for the database diagnostic. Docker Desktop with Compose can provide a local instance.
+- PostgreSQL for migrations, integration tests, and the database diagnostic. Docker Desktop with Compose can provide a local instance.
 
 ## Configuration
 
@@ -28,7 +28,8 @@ Settings are loaded from `SolanaTracker.ConsoleApp/appsettings.json` using the .
   },
   "Database": {
     "ConnectionString": "Host=localhost;Port=55432;Database=solana_tracker;Username=solana_tracker;Password=solana_tracker_dev;Timeout=5;Command Timeout=5",
-    "CheckConnection": false
+    "CheckConnection": false,
+    "ApplyMigrationsOnStartup": true
   }
 }
 ```
@@ -38,12 +39,23 @@ Settings are loaded from `SolanaTracker.ConsoleApp/appsettings.json` using the .
 | `Explorer:RpcEndpoint` | Solana JSON-RPC URL; must use HTTP or HTTPS. |
 | `Explorer:WalletAddress` | Wallet whose transactions are inspected. Required for RPC execution. |
 | `Explorer:SignatureLimit` | Number of signatures requested, from 1 to 1,000. Only the newest listed transaction is retrieved. |
-| `Database:ConnectionString` | PostgreSQL connection parameters. Required for the database diagnostic. |
+| `Database:ConnectionString` | PostgreSQL connection parameters. Required for migrations and the database diagnostic. |
 | `Database:CheckConnection` | Run the database diagnostic instead of Solana inspection. Defaults to `false`. |
+| `Database:ApplyMigrationsOnStartup` | Apply pending EF migrations before normal execution. Enabled in the included configuration; defaults to `false` when omitted. Ignored in diagnostic mode. |
 
-Command-line settings override environment variables, which override JSON configuration. Environment variables use double underscores for section separators, for example `Database__ConnectionString` or `Explorer__SignatureLimit`.
+For personal overrides, edit `SolanaTracker.ConsoleApp/appsettings.local.json`. It is optional, ignored by Git, copied beside the executable when built, and excluded from publish output. Include only the settings you want to override, for example:
 
-Configuration is loaded beside the executable, independently of the working directory. Startup validates the settings required by the selected execution mode. RPC execution does not require PostgreSQL.
+```json
+{
+  "Explorer": {
+    "SignatureLimit": 10
+  }
+}
+```
+
+The local file overrides `appsettings.json` and any environment-specific JSON settings. Command-line settings override environment variables, which override the local file. Environment variables use double underscores for section separators, for example `Database__ConnectionString` or `Explorer__SignatureLimit`.
+
+Configuration is loaded beside the executable, independently of the working directory. Startup validates the settings required by the selected execution mode. With startup migrations enabled, PostgreSQL must be available before RPC execution begins. With migrations disabled, RPC execution remains independent of PostgreSQL.
 
 The included database credentials are for local development only. Supply deployment credentials through environment configuration or an appropriate secret provider.
 
@@ -71,7 +83,40 @@ Use either a single positional wallet argument or named settings. The applicatio
 
 ## Database
 
-Database access uses Npgsql and direct SQL. The current database operation is a read-only connectivity diagnostic; no application schema or persistence operations are implemented.
+The persistence schema is defined by EF Core entities and Fluent API mappings in `SolanaTracker.Infrastructure`, using the Npgsql PostgreSQL provider. The initial migration creates:
+
+- `transactions`: signature primary key, slot, nullable block time, execution outcome and error, source JSON, and ingestion time.
+- `transfers`: composite primary key `(signature, instruction_index)`, transaction foreign key, sender, recipient, and lamports; sender and recipient indexes support wallet queries.
+
+Slots and lamports use `numeric(20,0)` with unsigned 64-bit range checks and exact C# conversions. Transaction outcomes and errors must agree. Deleting a transaction with dependent transfers is restricted. The database model assumes one Solana network per database. The console does not yet write fetched transactions or extracted transfers.
+
+### Startup migrations
+
+With `Database:CheckConnection=false` and `Database:ApplyMigrationsOnStartup=true`, the host applies pending migrations before running the explorer. EF creates the target database if missing and the login has database-creation permission. Otherwise, provision the database separately. Schema changes require suitable DDL privileges. Migration failure aborts startup before Solana requests.
+
+Set `Database:ApplyMigrationsOnStartup=false` to manage migrations separately. No automatic schema check or update runs in that mode. The diagnostic remains read-only regardless of this flag.
+
+### EF tooling
+
+Restore the pinned local tool once after checkout:
+
+```sh
+dotnet tool restore
+```
+
+Generate migrations after changing the entities or mappings, then review the generated operations:
+
+```sh
+dotnet ef migrations add MigrationName --project SolanaTracker.Infrastructure --startup-project SolanaTracker.ConsoleApp --context IndexerDbContext --output-dir Persistence/Migrations
+```
+
+Apply pending migrations explicitly when startup migration is disabled:
+
+```sh
+dotnet ef database update --project SolanaTracker.Infrastructure --startup-project SolanaTracker.ConsoleApp --context IndexerDbContext
+```
+
+These commands use `Database:ConnectionString` from configuration. Override the target through `Database__ConnectionString` or arguments after `--`. The design-time factory builds configuration without starting hosted services or executing RPC calls. Keep applied migrations unchanged; add a new migration for later schema changes. `EnsureCreated` is not used.
 
 ### Local instance
 
@@ -128,12 +173,35 @@ Restart with `docker compose up -d --wait`. Removing the named volume deletes it
 
 ```sh
 dotnet build SolanaTracker.sln
+dotnet test SolanaTracker.Tests
+```
+
+Unit tests run offline using saved JSON fixtures and fake HTTP responses. Coverage includes transfer extraction, transaction outcomes, malformed input, configuration binding and validation, configuration-provider precedence, and console workflow orchestration.
+
+Run integration tests against real PostgreSQL:
+
+```sh
+docker compose up -d --wait
+dotnet test SolanaTracker.IntegrationTests
+# Both projects:
 dotnet test SolanaTracker.sln
 ```
 
-The xUnit suite runs offline using saved JSON fixtures and fake HTTP responses. Coverage includes transfer extraction, transaction outcomes, malformed input, configuration binding and validation, configuration-provider precedence, and console workflow orchestration.
+Integration tests load `SolanaTracker.IntegrationTests/testsettings.json`, which defaults to the Compose server on port `55432`. To use your own local PostgreSQL instance, put its connection string in `SolanaTracker.IntegrationTests/testsettings.local.json` (ignored by Git):
 
-Database configuration tests do not require PostgreSQL. Verify real connectivity separately with the database diagnostic. Database schema and persistence integration tests are not yet implemented.
+```json
+{
+  "Database": {
+    "ConnectionString": "Host=localhost;Port=5432;Username=YOUR_USER;Password=YOUR_PASSWORD;Timeout=5;Command Timeout=10"
+  }
+}
+```
+
+Run `dotnet test SolanaTracker.IntegrationTests`, or run `SchemaTests` in Rider. Both settings files are copied beside the test assembly, so the working directory does not matter. The local file overrides shared settings; `TEST_POSTGRES_CONNECTION_STRING` overrides both, including in CI. Test settings are separate from the application's `appsettings.json`.
+
+The login must be allowed to create databases and connect to the `postgres` administrative database. Each test creates and removes only a uniquely named `solana_tests_*` database, independently of the application database. Tests fail if PostgreSQL is unavailable; they are not silently skipped.
+
+Coverage includes missing-database creation, initial migration, safe reruns with existing data, exact unsigned-value round trips, keys, foreign keys, range and outcome constraints, wallet indexes, startup migration completion, rollback on failure, and read-only diagnostic behaviour. Integration tests make no Solana requests.
 
 ## Current limitations
 

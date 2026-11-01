@@ -5,3 +5,5 @@ riderModule.iml
 /_ReSharper.Caches/
 .idea/
 *.DotSettings.user
+/SolanaTracker.IntegrationTests/testsettings.local.json
+/SolanaTracker.ConsoleApp/appsettings.local.json

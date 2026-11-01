@@ -6,6 +6,7 @@ using SolanaTracker.Application;
 using SolanaTracker.Infrastructure.Solana;
 using SolanaTracker.Infrastructure.Persistence;
 using Npgsql;
+using Microsoft.EntityFrameworkCore;
 
 namespace SolanaTracker.ConsoleApp;
 
@@ -15,13 +16,20 @@ public static class ExplorerHost
     // an isolated directory. At runtime, settings are loaded beside the executable.
     public static HostApplicationBuilder CreateBuilder(string[] args, string? contentRootPath = null)
     {
+        var normalizedArgs = NormalizeArguments(args);
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
-            Args = NormalizeArguments(args),
+            Args = normalizedArgs,
             ContentRootPath = contentRootPath ?? AppContext.BaseDirectory
         });
 
+        // Keep environment and command-line overrides above machine-local JSON settings.
+        builder.Configuration.AddJsonFile("appsettings.local.json", optional: true)
+            .AddEnvironmentVariables()
+            .AddCommandLine(normalizedArgs);
+
         var checkDatabase = builder.Configuration.GetValue<bool>("Database:CheckConnection");
+        var applyMigrations = !checkDatabase && builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup");
         var explorerOptions = builder.Services.AddOptions<ExplorerOptions>()
             .Bind(builder.Configuration.GetSection(ExplorerOptions.SectionName))
             .PostConfigure(options => options.WalletAddress = options.WalletAddress?.Trim() ?? "")
@@ -38,16 +46,20 @@ public static class ExplorerHost
             .Validate(options => IsValidConnectionString(options.ConnectionString),
                 "Database:ConnectionString must specify a valid PostgreSQL host, database, and username.");
 
-        // Only validate settings needed by the selected command. RPC exploration
-        // still works without PostgreSQL, and a database check needs no wallet.
-        if (checkDatabase)
+        // The diagnostic needs no wallet. Normal execution requires database settings
+        // only when startup migrations are enabled.
+        if (checkDatabase || applyMigrations)
             databaseOptions.ValidateOnStart();
-        else
+        if (!checkDatabase)
             explorerOptions.ValidateOnStart();
 
         builder.Services.AddSingleton(services => NpgsqlDataSource.Create(
             services.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
         builder.Services.AddSingleton<PostgresDatabase>();
+        builder.Services.AddDbContext<IndexerDbContext>((services, options) =>
+            options.UseNpgsql(services.GetRequiredService<NpgsqlDataSource>()));
+        if (applyMigrations)
+            builder.Services.AddHostedService<DatabaseMigrationService>();
 
         // Factory-created singletons are disposed by the host at the end of this pass.
         builder.Services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(30) });
